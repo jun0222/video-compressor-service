@@ -1,15 +1,6 @@
+# server.py
 import socket
-
-def receive_all(client_socket, buffer_size=1400, end_marker="<END>"):
-    """全データを受信し、終了マーカーが見つかるまでデータを受信"""
-    data = ""
-    while True:
-        part = client_socket.recv(buffer_size).decode('utf-8')
-        if end_marker in part:  # 終了マーカーを検出
-            data += part.replace(end_marker, "")  # マーカーを除去して保存
-            break
-        data += part
-    return data
+import struct
 
 def start_server(host="0.0.0.0", port=12345):
     server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -24,12 +15,30 @@ def start_server(host="0.0.0.0", port=12345):
             client_socket, client_address = server_socket.accept()
             print(f"Connection from {client_address}")
 
-            # データを受信
-            data = receive_all(client_socket)
-            print(f"Received: {data}")
+            # 最初の32バイトでファイルサイズを受信
+            file_size_bytes = client_socket.recv(32)
+            if len(file_size_bytes) < 32:
+                print("Failed to receive file size")
+                client_socket.close()
+                continue
+
+            # 32バイトを文字列として解釈し、整数に変換
+            file_size_str = file_size_bytes.decode('utf-8').strip()
+            file_size = int(file_size_str)
+            print(f"File size received: {file_size} bytes")
+
+            # ファイルデータの受信
+            received_data = b""
+            while len(received_data) < file_size:
+                chunk = client_socket.recv(1400)
+                if not chunk:
+                    break
+                received_data += chunk
+
+            print(f"Received file data: {received_data[:50]}... (truncated)")
 
             # 応答を送信
-            response = "Message received"
+            response = "File size and data received successfully"
             client_socket.sendall(response.encode('utf-8'))
 
             client_socket.close()

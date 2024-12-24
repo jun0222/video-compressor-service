@@ -1,12 +1,5 @@
+# client.py
 import socket
-
-def send_in_chunks(socket, data, chunk_size=1400, end_marker="<END>"):
-    """データをチャンクに分割して送信し、終了マーカーを送信"""
-    for i in range(0, len(data), chunk_size):
-        chunk = data[i:i + chunk_size]
-        socket.sendall(chunk.encode('utf-8'))
-    # 終了マーカーを送信
-    socket.sendall(end_marker.encode('utf-8'))
 
 def start_client(host="127.0.0.1", port=12345):
     client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -16,12 +9,17 @@ def start_client(host="127.0.0.1", port=12345):
         client_socket.connect((host, port))
         print(f"Connected to server at {host}:{port}")
 
-        # 送信するデータを準備
-        message = "Hello, Server! " * 100  # 長いメッセージ
-        print(f"Sending data in chunks of 1400 bytes...")
+        # ファイルデータを準備
+        file_data = "Hello, Server! " * 100  # 模擬的なファイルデータ
+        file_size = len(file_data.encode('utf-8'))
+        print(f"File size: {file_size} bytes")
 
-        # データをチャンクに分割して送信
-        send_in_chunks(client_socket, message)
+        # ファイルサイズを32バイトの文字列で送信（右詰めパディング）
+        file_size_str = f"{file_size:>32}"
+        client_socket.sendall(file_size_str.encode('utf-8'))
+
+        # ファイルデータを送信
+        client_socket.sendall(file_data.encode('utf-8'))
 
         # サーバーからの応答を受信
         response = client_socket.recv(1024).decode('utf-8')
