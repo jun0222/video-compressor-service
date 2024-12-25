@@ -2,6 +2,12 @@
 import socket
 import struct
 
+def save_file(file_data, file_name="uploaded_file.mp4"):
+    """指定された名前でファイルを保存"""
+    with open(file_name, "wb") as f:
+        f.write(file_data)
+    print(f"File saved as {file_name}")
+
 def start_server(host="0.0.0.0", port=12345):
     server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
@@ -38,16 +44,14 @@ def start_server(host="0.0.0.0", port=12345):
             # MP4ファイルのヘッダーを確認（'ftyp'ボックスを検出）
             if received_data[:12].find(b'ftyp') != -1:
                 print("MP4 file confirmed")
+                save_file(received_data)
+                status_message = "Upload success".ljust(16).encode('utf-8')
             else:
                 print("Not an MP4 file")
-                client_socket.close()
-                continue
+                status_message = "Invalid format".ljust(16).encode('utf-8')
 
-            print(f"Received file data: {received_data[:50]}... (truncated)")
-
-            # 応答を送信
-            response = "File size and data received successfully"
-            client_socket.sendall(response.encode('utf-8'))
+            # 応答を送信（16バイトのステータス情報）
+            client_socket.sendall(status_message)
 
             client_socket.close()
             print(f"Connection with {client_address} closed")
