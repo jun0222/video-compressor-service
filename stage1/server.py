@@ -35,6 +35,14 @@ def start_server(host="0.0.0.0", port=12345):
                     break
                 received_data += chunk
 
+            # MP4ファイルのヘッダーを確認（'ftyp'ボックスを検出）
+            if received_data[:12].find(b'ftyp') != -1:
+                print("MP4 file confirmed")
+            else:
+                print("Not an MP4 file")
+                client_socket.close()
+                continue
+
             print(f"Received file data: {received_data[:50]}... (truncated)")
 
             # 応答を送信
