@@ -10,7 +10,7 @@ def save_file(file_data, file_name="uploaded_file.mp4"):
         f.write(file_data)
     print(f"File saved as {file_name}")
 
-def compress_video(input_file, output_file, bitrate="1M", resolution=None):
+def compress_video(input_file, output_file, bitrate="1M", resolution=None, aspect_ratio=None):
     """FFmpegを使用して動画を圧縮"""
     try:
         command = [
@@ -18,6 +18,8 @@ def compress_video(input_file, output_file, bitrate="1M", resolution=None):
         ]
         if resolution:
             command.extend(["-vf", f"scale={resolution}"])
+        if aspect_ratio:
+            command.extend(["-aspect", aspect_ratio])
         command.append(output_file)
         subprocess.run(command, check=True)
         print(f"Video compressed successfully: {output_file}")
@@ -39,19 +41,21 @@ def start_server(host="0.0.0.0", port=12345):
             client_socket, client_address = server_socket.accept()
             print(f"Connection from {client_address}")
 
-            # 最初の64バイトでファイルサイズと解像度を受信
-            metadata_bytes = client_socket.recv(64)
-            if len(metadata_bytes) < 64:
+            # 最初の80バイトでファイルサイズ、解像度、アスペクト比を受信
+            metadata_bytes = client_socket.recv(80)
+            if len(metadata_bytes) < 80:
                 print("Failed to receive metadata")
                 client_socket.close()
                 continue
 
             # メタデータを解析
             file_size_str = metadata_bytes[:32].decode('utf-8').strip()
-            resolution = metadata_bytes[32:].decode('utf-8').strip() or None
+            resolution = metadata_bytes[32:64].decode('utf-8').strip() or None
+            aspect_ratio = metadata_bytes[64:80].decode('utf-8').strip() or None
             file_size = int(file_size_str)
             print(f"File size received: {file_size} bytes")
             print(f"Requested resolution: {resolution if resolution else 'Original'}")
+            print(f"Requested aspect ratio: {aspect_ratio if aspect_ratio else 'Original'}")
 
             # ファイルデータの受信
             received_data = b""
@@ -71,7 +75,7 @@ def start_server(host="0.0.0.0", port=12345):
                 save_file(received_data, uploaded_file)
 
                 # 圧縮処理
-                compressed_file_path = compress_video(uploaded_file, compressed_file, resolution=resolution)
+                compressed_file_path = compress_video(uploaded_file, compressed_file, resolution=resolution, aspect_ratio=aspect_ratio)
 
                 if compressed_file_path and os.path.isfile(compressed_file_path):
                     # 圧縮後のファイルをクライアントに送信

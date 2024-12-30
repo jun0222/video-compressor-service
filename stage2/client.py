@@ -1,9 +1,8 @@
 # client.py
 import socket
-import struct
 import os
 
-def start_client(file_path, resolution="1200x700", host="127.0.0.1", port=12345):
+def start_client(file_path, resolution=None, aspect_ratio=None, host="127.0.0.1", port=12345):
     if not os.path.isfile(file_path):
         print(f"File not found: {file_path}")
         return
@@ -19,11 +18,12 @@ def start_client(file_path, resolution="1200x700", host="127.0.0.1", port=12345)
         file_size = os.path.getsize(file_path)
         print(f"File size: {file_size} bytes")
 
-        # 解像度を32バイトの文字列で準備（空の場合はパディング）
+        # 解像度を32バイト、アスペクト比を16バイトで準備（空の場合はパディング）
         resolution_str = f"{resolution}".ljust(32) if resolution else "".ljust(32)
+        aspect_ratio_str = f"{aspect_ratio}".ljust(16) if aspect_ratio else "".ljust(16)
 
-        # メタデータ（ファイルサイズ + 解像度）を送信
-        metadata = f"{file_size:>32}".encode('utf-8') + resolution_str.encode('utf-8')
+        # メタデータ（ファイルサイズ + 解像度 + アスペクト比）を送信
+        metadata = f"{file_size:>32}".encode('utf-8') + resolution_str.encode('utf-8') + aspect_ratio_str.encode('utf-8')
         client_socket.sendall(metadata)
 
         # ファイルデータを送信
@@ -60,5 +60,6 @@ def start_client(file_path, resolution="1200x700", host="127.0.0.1", port=12345)
 if __name__ == "__main__":
     # アップロードする動画ファイルのパスを指定
     file_path = "video.mp4"  # 必要に応じて変更
-    resolution = "640x480"  # 圧縮解像度を指定（例: "1280x720"、"640x480"など）
-    start_client(file_path, resolution)
+    resolution = "1280x720"  # 圧縮解像度を指定（例: "1280x720", "640x480" など）
+    aspect_ratio = "4:3"   # アスペクト比を指定（例: "16:9", "4:3"）
+    start_client(file_path, resolution, aspect_ratio)
