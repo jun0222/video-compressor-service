@@ -3,7 +3,7 @@ import socket
 import struct
 import os
 
-def start_client(file_path, host="127.0.0.1", port=12345):
+def start_client(file_path, resolution="1200x700", host="127.0.0.1", port=12345):
     if not os.path.isfile(file_path):
         print(f"File not found: {file_path}")
         return
@@ -19,18 +19,36 @@ def start_client(file_path, host="127.0.0.1", port=12345):
         file_size = os.path.getsize(file_path)
         print(f"File size: {file_size} bytes")
 
-        # ファイルサイズを32バイトの文字列で送信（右詰めパディング）
-        file_size_str = f"{file_size:>32}"
-        client_socket.sendall(file_size_str.encode('utf-8'))
+        # 解像度を32バイトの文字列で準備（空の場合はパディング）
+        resolution_str = f"{resolution}".ljust(32) if resolution else "".ljust(32)
+
+        # メタデータ（ファイルサイズ + 解像度）を送信
+        metadata = f"{file_size:>32}".encode('utf-8') + resolution_str.encode('utf-8')
+        client_socket.sendall(metadata)
 
         # ファイルデータを送信
         with open(file_path, "rb") as f:
             while chunk := f.read(1400):
                 client_socket.sendall(chunk)
 
-        # サーバーからの応答を受信（16バイトのステータス情報）
-        response = client_socket.recv(16).decode('utf-8').strip()
-        print(f"Server response: {response}")
+        # サーバーからの圧縮ファイルサイズを受信
+        compressed_size_bytes = client_socket.recv(32)
+        compressed_size = int(compressed_size_bytes.decode('utf-8').strip())
+        print(f"Compressed file size: {compressed_size} bytes")
+
+        # 圧縮ファイルデータを受信
+        compressed_data = b""
+        while len(compressed_data) < compressed_size:
+            chunk = client_socket.recv(1400)
+            if not chunk:
+                break
+            compressed_data += chunk
+
+        # 圧縮ファイルを保存
+        compressed_file_path = "compressed_" + os.path.basename(file_path)
+        with open(compressed_file_path, "wb") as f:
+            f.write(compressed_data)
+        print(f"Compressed file saved as: {compressed_file_path}")
 
     except Exception as e:
         print(f"Error: {e}")
@@ -42,4 +60,5 @@ def start_client(file_path, host="127.0.0.1", port=12345):
 if __name__ == "__main__":
     # アップロードする動画ファイルのパスを指定
     file_path = "video.mp4"  # 必要に応じて変更
-    start_client(file_path)
+    resolution = "640x480"  # 圧縮解像度を指定（例: "1280x720"、"640x480"など）
+    start_client(file_path, resolution)

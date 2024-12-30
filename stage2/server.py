@@ -10,12 +10,15 @@ def save_file(file_data, file_name="uploaded_file.mp4"):
         f.write(file_data)
     print(f"File saved as {file_name}")
 
-def compress_video(input_file, output_file, bitrate="1M"):
+def compress_video(input_file, output_file, bitrate="1M", resolution=None):
     """FFmpegを使用して動画を圧縮"""
     try:
         command = [
-            "ffmpeg", "-i", input_file, "-b:v", bitrate, "-y", output_file
+            "ffmpeg", "-i", input_file, "-b:v", bitrate, "-y"
         ]
+        if resolution:
+            command.extend(["-vf", f"scale={resolution}"])
+        command.append(output_file)
         subprocess.run(command, check=True)
         print(f"Video compressed successfully: {output_file}")
         return output_file
@@ -36,17 +39,19 @@ def start_server(host="0.0.0.0", port=12345):
             client_socket, client_address = server_socket.accept()
             print(f"Connection from {client_address}")
 
-            # 最初の32バイトでファイルサイズを受信
-            file_size_bytes = client_socket.recv(32)
-            if len(file_size_bytes) < 32:
-                print("Failed to receive file size")
+            # 最初の64バイトでファイルサイズと解像度を受信
+            metadata_bytes = client_socket.recv(64)
+            if len(metadata_bytes) < 64:
+                print("Failed to receive metadata")
                 client_socket.close()
                 continue
 
-            # 32バイトを文字列として解釈し、整数に変換
-            file_size_str = file_size_bytes.decode('utf-8').strip()
+            # メタデータを解析
+            file_size_str = metadata_bytes[:32].decode('utf-8').strip()
+            resolution = metadata_bytes[32:].decode('utf-8').strip() or None
             file_size = int(file_size_str)
             print(f"File size received: {file_size} bytes")
+            print(f"Requested resolution: {resolution if resolution else 'Original'}")
 
             # ファイルデータの受信
             received_data = b""
@@ -66,7 +71,7 @@ def start_server(host="0.0.0.0", port=12345):
                 save_file(received_data, uploaded_file)
 
                 # 圧縮処理
-                compressed_file_path = compress_video(uploaded_file, compressed_file)
+                compressed_file_path = compress_video(uploaded_file, compressed_file, resolution=resolution)
 
                 if compressed_file_path and os.path.isfile(compressed_file_path):
                     # 圧縮後のファイルをクライアントに送信
