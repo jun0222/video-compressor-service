@@ -1,31 +1,31 @@
 # server.py
 import socket
-import struct
 import os
 import subprocess
 
 def save_file(file_data, file_name="uploaded_file.mp4"):
-    """指定された名前でファイルを保存"""
+    """Save uploaded file to disk"""
     with open(file_name, "wb") as f:
         f.write(file_data)
     print(f"File saved as {file_name}")
 
-def compress_video(input_file, output_file, bitrate="1M", resolution=None, aspect_ratio=None):
-    """FFmpegを使用して動画を圧縮"""
+def convert_to_audio(input_file, output_file):
+    """Convert video to audio using FFmpeg"""
     try:
-        command = [
-            "ffmpeg", "-i", input_file, "-b:v", bitrate, "-y"
-        ]
-        if resolution:
-            command.extend(["-vf", f"scale={resolution}"])
-        if aspect_ratio:
-            command.extend(["-aspect", aspect_ratio])
-        command.append(output_file)
+        # Check for audio stream
+        result = subprocess.run(["ffmpeg", "-i", input_file], stderr=subprocess.PIPE, text=True)
+        print("FFmpeg input analysis:\n", result.stderr)  # Log FFmpeg analysis
+        if "Audio" not in result.stderr:
+            print("No audio stream found in the input file.")
+            return None
+
+        # Convert to audio
+        command = ["ffmpeg", "-i", input_file, "-vn", "-q:a", "0", "-y", output_file]
         subprocess.run(command, check=True)
-        print(f"Video compressed successfully: {output_file}")
+        print(f"Audio extracted successfully: {output_file}")
         return output_file
     except subprocess.CalledProcessError as e:
-        print(f"Error compressing video: {e}")
+        print(f"Error converting to audio: {e}")
         return None
 
 def start_server(host="0.0.0.0", port=12345):
@@ -41,23 +41,17 @@ def start_server(host="0.0.0.0", port=12345):
             client_socket, client_address = server_socket.accept()
             print(f"Connection from {client_address}")
 
-            # 最初の80バイトでファイルサイズ、解像度、アスペクト比を受信
-            metadata_bytes = client_socket.recv(80)
-            if len(metadata_bytes) < 80:
-                print("Failed to receive metadata")
+            # Receive file size
+            file_size_bytes = client_socket.recv(32)
+            if not file_size_bytes.strip():
+                print("Failed to receive file size")
                 client_socket.close()
                 continue
 
-            # メタデータを解析
-            file_size_str = metadata_bytes[:32].decode('utf-8').strip()
-            resolution = metadata_bytes[32:64].decode('utf-8').strip() or None
-            aspect_ratio = metadata_bytes[64:80].decode('utf-8').strip() or None
-            file_size = int(file_size_str)
-            print(f"File size received: {file_size} bytes")
-            print(f"Requested resolution: {resolution if resolution else 'Original'}")
-            print(f"Requested aspect ratio: {aspect_ratio if aspect_ratio else 'Original'}")
+            file_size = int(file_size_bytes.decode('utf-8').strip())
+            print(f"File size: {file_size} bytes")
 
-            # ファイルデータの受信
+            # Receive file data
             received_data = b""
             while len(received_data) < file_size:
                 chunk = client_socket.recv(1400)
@@ -65,44 +59,27 @@ def start_server(host="0.0.0.0", port=12345):
                     break
                 received_data += chunk
 
-            # MP4ファイルのヘッダーを確認（'ftyp'ボックスを検出）
-            if received_data[:12].find(b'ftyp') != -1:
-                print("MP4 file confirmed")
-                uploaded_file = "uploaded_file.mp4"
-                compressed_file = "compressed_file.mp4"
+            uploaded_file = "uploaded_file.mp4"
+            audio_file = "audio_file.mp3"
 
-                # ファイル保存
-                save_file(received_data, uploaded_file)
+            # Save the uploaded file
+            save_file(received_data, uploaded_file)
 
-                # 圧縮処理
-                compressed_file_path = compress_video(uploaded_file, compressed_file, resolution=resolution, aspect_ratio=aspect_ratio)
+            # Convert to audio
+            audio_file_path = convert_to_audio(uploaded_file, audio_file)
 
-                if compressed_file_path and os.path.isfile(compressed_file_path):
-                    # 圧縮後のファイルをクライアントに送信
-                    compressed_size = os.path.getsize(compressed_file_path)
-                    print(f"Compressed file size: {compressed_size} bytes")
+            if audio_file_path and os.path.isfile(audio_file_path):
+                audio_size = os.path.getsize(audio_file_path)
+                print(f"Audio file size: {audio_size} bytes")
+                client_socket.sendall(f"{audio_size:>32}".encode('utf-8'))
+                print("Sent audio file size to client")
 
-                    # 圧縮ファイルサイズを送信
-                    compressed_size_str = f"{compressed_size:>32}"
-                    client_socket.sendall(compressed_size_str.encode('utf-8'))
-
-                    # 圧縮ファイルデータを送信
-                    with open(compressed_file_path, "rb") as f:
-                        while chunk := f.read(1400):
-                            client_socket.sendall(chunk)
-
-                    print("Compressed file sent successfully")
-                else:
-                    print("Compression failed")
-                    status_message = "Compression failed".ljust(16).encode('utf-8')
-                    client_socket.sendall(status_message)
-            else:
-                print("Not an MP4 file")
-                status_message = "Invalid format".ljust(16).encode('utf-8')
-                client_socket.sendall(status_message)
+                with open(audio_file_path, "rb") as f:
+                    while chunk := f.read(1400):
+                        client_socket.sendall(chunk)
+                print("Audio file sent successfully")
 
             client_socket.close()
-            print(f"Connection with {client_address} closed")
 
     except Exception as e:
         print(f"Error: {e}")
