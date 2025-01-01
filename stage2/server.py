@@ -9,28 +9,34 @@ def save_file(file_data, file_name="uploaded_file.mp4"):
         f.write(file_data)
     print(f"File saved as {file_name}")
 
-def convert_to_gif_or_webp(input_file, output_file, start_time, duration, output_format):
-    """Convert video to gif or webp using FFmpeg"""
+def convert_video(input_file, output_file, start_time, duration, resolution=None, aspect_ratio=None):
+    """Convert video with resolution and aspect ratio using FFmpeg"""
     try:
-        # FFmpeg conversion command
+        # Base FFmpeg command
         command = [
-            "ffmpeg", "-i", input_file, "-ss", start_time, "-t", duration,
-            "-vf", "fps=10,scale=320:-1", "-y", output_file
+            "ffmpeg", "-i", input_file, "-ss", start_time, "-t", duration
         ]
-        if output_format == "gif":
-            command.append("-f")
-            command.append("gif")
-        elif output_format == "webp":
-            command.extend(["-vcodec", "libwebp"])
-        else:
-            print(f"Unsupported format: {output_format}")
-            return None
+
+        # Add resolution and aspect ratio if specified
+        if resolution or aspect_ratio:
+            video_filters = []
+            if resolution:
+                video_filters.append(f"scale={resolution}")
+            if video_filters:
+                command.extend(["-vf", ",".join(video_filters)])
+            if aspect_ratio:
+                command.extend(["-aspect", aspect_ratio])
+
+        command.extend(["-c:v", "libx264", "-preset", "fast", "-crf", "23", "-y", output_file])
+
+        # Log the ffmpeg command for debugging
+        print(f"Running FFmpeg command: {' '.join(command)}")
 
         subprocess.run(command, check=True)
-        print(f"Converted successfully: {output_file}")
+        print(f"Video converted successfully: {output_file}")
         return output_file
     except subprocess.CalledProcessError as e:
-        print(f"Error converting to {output_format}: {e}")
+        print(f"Error converting video: {e}")
         return None
 
 def start_server(host="0.0.0.0", port=12345):
@@ -46,13 +52,15 @@ def start_server(host="0.0.0.0", port=12345):
             client_socket, client_address = server_socket.accept()
             print(f"Connection from {client_address}")
 
-            # Receive metadata (file size, start_time, duration, output_format)
-            metadata_bytes = client_socket.recv(96)
+            # Receive metadata (file size, start_time, duration, output_format, resolution, aspect_ratio)
+            metadata_bytes = client_socket.recv(160)
             file_size = int(metadata_bytes[:32].decode('utf-8').strip())
             start_time = metadata_bytes[32:48].decode('utf-8').strip()
             duration = metadata_bytes[48:64].decode('utf-8').strip()
             output_format = metadata_bytes[64:96].decode('utf-8').strip()
-            print(f"File size: {file_size}, Start time: {start_time}, Duration: {duration}, Format: {output_format}")
+            resolution = metadata_bytes[96:128].decode('utf-8').strip() or None
+            aspect_ratio = metadata_bytes[128:160].decode('utf-8').strip() or None
+            print(f"File size: {file_size}, Start time: {start_time}, Duration: {duration}, Format: {output_format}, Resolution: {resolution}, Aspect Ratio: {aspect_ratio}")
 
             # Receive file data
             received_data = b""
@@ -68,8 +76,10 @@ def start_server(host="0.0.0.0", port=12345):
             # Save the uploaded file
             save_file(received_data, uploaded_file)
 
-            # Convert to gif or webp
-            converted_file_path = convert_to_gif_or_webp(uploaded_file, output_file, start_time, duration, output_format)
+            # Perform conversion
+            converted_file_path = convert_video(
+                uploaded_file, output_file, start_time, duration, resolution, aspect_ratio
+            )
 
             if converted_file_path and os.path.isfile(converted_file_path):
                 converted_size = os.path.getsize(converted_file_path)

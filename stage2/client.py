@@ -2,7 +2,7 @@
 import socket
 import os
 
-def start_client(file_path, start_time, duration, output_format, host="127.0.0.1", port=12345):
+def start_client(file_path, start_time, duration, output_format, resolution=None, aspect_ratio=None, host="127.0.0.1", port=12345):
     if not os.path.isfile(file_path):
         print(f"File not found: {file_path}")
         return
@@ -16,12 +16,25 @@ def start_client(file_path, start_time, duration, output_format, host="127.0.0.1
         file_size = os.path.getsize(file_path)
         print(f"File size: {file_size} bytes")
 
+        # Prepare metadata
         start_time_str = f"{start_time}".ljust(16)
         duration_str = f"{duration}".ljust(16)
         output_format_str = f"{output_format}".ljust(32)
+        resolution_str = f"{resolution}".ljust(32) if resolution else "".ljust(32)
+        aspect_ratio_str = f"{aspect_ratio}".ljust(32) if aspect_ratio else "".ljust(32)
+
+        metadata = (
+            f"{file_size:>32}".encode('utf-8') +
+            start_time_str.encode('utf-8') +
+            duration_str.encode('utf-8') +
+            output_format_str.encode('utf-8') +
+            resolution_str.encode('utf-8') +
+            aspect_ratio_str.encode('utf-8')
+        )
+        print("Metadata being sent to server:")
+        print(f"File size: {file_size}, Start time: {start_time}, Duration: {duration}, Format: {output_format}, Resolution: {resolution}, Aspect Ratio: {aspect_ratio}")
 
         # Send metadata
-        metadata = f"{file_size:>32}".encode('utf-8') + start_time_str.encode('utf-8') + duration_str.encode('utf-8') + output_format_str.encode('utf-8')
         client_socket.sendall(metadata)
 
         # Send file data
@@ -45,7 +58,8 @@ def start_client(file_path, start_time, duration, output_format, host="127.0.0.1
                 converted_data += chunk
 
             # Save converted file
-            converted_file_path = f"output.{output_format}"
+            base_name, _ = os.path.splitext(os.path.basename(file_path))
+            converted_file_path = f"{base_name}_converted.{output_format}"
             with open(converted_file_path, "wb") as f:
                 f.write(converted_data)
             print(f"Converted file saved as: {converted_file_path}")
@@ -63,5 +77,7 @@ if __name__ == "__main__":
     file_path = "video.mp4"  # Replace with your video file path
     start_time = "00:00:03"  # Start time for conversion
     duration = "5"           # Duration in seconds
-    output_format = "webp"    # Output format: 'gif' or 'webp'
-    start_client(file_path, start_time, duration, output_format)
+    output_format = "mp4"    # Output format: 'mp4', 'gif', 'webp', etc.
+    resolution = "640x360"   # Example resolution
+    aspect_ratio = "16:9"    # Example aspect ratio
+    start_client(file_path, start_time, duration, output_format, resolution, aspect_ratio)
